@@ -17,12 +17,11 @@ SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 REPO_ROOT = os.path.abspath(os.path.join(SCRIPT_DIR, ".."))
 
 DATA_DIR = os.path.join(REPO_ROOT, "data")
-SUBMISSION_DIR = os.path.join(REPO_ROOT, "submissions")
+SUBMISSIONS_DIR = os.path.join(REPO_ROOT, "submissions")
 
-os.makedirs(SUBMISSION_DIR, exist_ok=True)
+os.makedirs(SUBMISSIONS_DIR, exist_ok=True)
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-print("Device:", device)
 
 # ----------------------------
 # Load MUTAG dataset
@@ -34,16 +33,30 @@ dataset = TUDataset(root=DATA_DIR, name="MUTAG")
 # Load CSV splits
 # ----------------------------
 
-print("Loading CSV splits...")
-
 train_df = pd.read_csv(os.path.join(DATA_DIR, "train.csv"))
 test_df = pd.read_csv(os.path.join(DATA_DIR, "test.csv"))
 
 # ----------------------------
-# Build train graphs
+# Perturbation Function
+# ----------------------------
+
+def perturb_graph(data, noise_level=0.1):
+
+    data = data.clone()
+
+    if data.x is not None:
+        noise = torch.randn_like(data.x) * noise_level
+        data.x = data.x + noise
+
+    return data
+
+# ----------------------------
+# Build graph lists
 # ----------------------------
 
 train_graphs = []
+ideal_test_graphs = []
+perturbed_test_graphs = []
 
 for _, row in train_df.iterrows():
 
@@ -52,23 +65,23 @@ for _, row in train_df.iterrows():
 
     train_graphs.append(g)
 
-# ----------------------------
-# Build test graphs
-# ----------------------------
-
-test_graphs = []
-
 for _, row in test_df.iterrows():
 
     g = dataset[int(row.graph_index)]
-    test_graphs.append(g)
+
+    ideal_test_graphs.append(g)
+
+    perturbed_test_graphs.append(perturb_graph(g))
 
 # ----------------------------
 # DataLoaders
 # ----------------------------
 
 train_loader = DataLoader(train_graphs, batch_size=32, shuffle=True)
-test_loader = DataLoader(test_graphs, batch_size=32, shuffle=False)
+
+ideal_test_loader = DataLoader(ideal_test_graphs, batch_size=32)
+
+perturbed_test_loader = DataLoader(perturbed_test_graphs, batch_size=32)
 
 # ----------------------------
 # Model
@@ -102,7 +115,7 @@ class GINModel(torch.nn.Module):
         return F.log_softmax(x, dim=1)
 
 # ----------------------------
-# Initialize model
+# Initialize Model
 # ----------------------------
 
 model = GINModel(dataset.num_features, dataset.num_classes).to(device)
@@ -113,7 +126,7 @@ optimizer = torch.optim.Adam(model.parameters(), lr=0.01)
 # Training
 # ----------------------------
 
-print("Training model...")
+print("Training on IDEAL graphs...")
 
 for epoch in range(50):
 
@@ -140,36 +153,53 @@ for epoch in range(50):
         print(f"Epoch {epoch+1} | Loss {total_loss:.4f}")
 
 # ----------------------------
-# Prediction
+# Prediction Function
 # ----------------------------
 
-print("Generating predictions...")
+def predict(model, loader):
 
-model.eval()
+    model.eval()
 
-predictions = []
+    preds = []
 
-with torch.no_grad():
+    with torch.no_grad():
 
-    for data in test_loader:
+        for data in loader:
 
-        data = data.to(device)
+            data = data.to(device)
 
-        out = model(data)
+            out = model(data)
 
-        pred = out.argmax(dim=1)
+            preds.extend(out.argmax(dim=1).tolist())
 
-        predictions.extend(pred.tolist())
+    return preds
 
 # ----------------------------
-# Save submission
+# Predictions
 # ----------------------------
 
-submission_path = os.path.join(SUBMISSION_DIR, "submission.csv")
+print("Generating IDEAL predictions...")
+ideal_predictions = predict(model, ideal_test_loader)
+
+print("Generating PERTURBED predictions...")
+perturbed_predictions = predict(model, perturbed_test_loader)
+
+# ----------------------------
+# Save Submissions
+# ----------------------------
+
+ideal_path = os.path.join(SUBMISSIONS_DIR, "ideal_submission.csv")
+perturbed_path = os.path.join(SUBMISSIONS_DIR, "perturbed_submission.csv")
 
 pd.DataFrame({
     "graph_index": test_df.graph_index,
-    "label": predictions
-}).to_csv(submission_path, index=False)
+    "target": ideal_predictions
+}).to_csv(ideal_path, index=False)
 
-print("Submission saved to:", submission_path)
+pd.DataFrame({
+    "graph_index": test_df.graph_index,
+    "target": perturbed_predictions
+}).to_csv(perturbed_path, index=False)
+
+print("Saved ideal submission:", ideal_path)
+print("Saved perturbed submission:", perturbed_path)
