@@ -1,16 +1,20 @@
 name: Process Secure Submission
 
-# Trigger on PUSH to main
+# Trigger on PUSH to main and on PR events
 on:
   push:
     branches:
       - main
+  pull_request:
+    branches:
+      - main
+    types: [opened, synchronize, reopened]
 
 permissions:
   contents: write
 
 jobs:
-  process-merged-file:
+  process-submission:
     runs-on: ubuntu-latest
 
     steps:
@@ -40,15 +44,17 @@ jobs:
           python -c "from cryptography.hazmat.primitives import serialization, hashes; print('cryptography OK')"
 
       # 5️⃣ Run the submission processing script
-      - name: Find and Process Submission
+      - name: Decrypt, Score, and Update Leaderboard
         env:
           SUBMISSION_PRIVATE_KEY: ${{ secrets.SUBMISSION_PRIVATE_KEY }}
-          TEST_LABELS_CSV: ${{secrets.TEST_LABELS_CSV}}
+          TEST_LABELS_CSV: ${{ secrets.TEST_LABELS_CSV }}
         run: |
+          echo "Decrypting and scoring submissions..."
           python .github/scripts/process_submission.py
 
-      # 6️⃣ Commit and push any changes
-      - name: Commit and Push Changes
+      # 6️⃣ Commit and push any changes only for pushes to main
+      - name: Commit and Push Changes (Main branch only)
+        if: github.event_name == 'push'
         run: |
           git config user.name "SubmissionBot"
           git config user.email "bot@noreply.github.com"
@@ -58,4 +64,3 @@ jobs:
             git push
           else
             echo "No changes to commit."
-          fi
