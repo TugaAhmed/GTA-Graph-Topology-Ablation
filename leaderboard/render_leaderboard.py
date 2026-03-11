@@ -20,7 +20,10 @@ def main() -> None:
         md_path.write_text("# Leaderboard\n\n_No submissions yet._\n", encoding="utf-8")
         return
 
-    df = df.sort_values("validation_f1_ideal", ascending=False)
+    df = df.sort_values(
+    ["validation_f1_perturbed", "robustness_gap"],
+    ascending=[False, True]
+    )
     df.insert(0, "rank", range(1, len(df) + 1))
 
     md = ["# Leaderboard", "", df.to_markdown(index=False)]
