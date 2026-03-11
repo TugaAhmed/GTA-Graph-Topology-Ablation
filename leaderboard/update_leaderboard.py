@@ -1,6 +1,8 @@
 # scripts/leaderboard/update_leaderboard.py
 from pathlib import Path
 import pandas as pd
+import subprocess
+import json
 
 from scripts.leaderboard.calculate_scores import calculate_scores_pair
 from scripts.encryption.decrypt import decrypt_file
