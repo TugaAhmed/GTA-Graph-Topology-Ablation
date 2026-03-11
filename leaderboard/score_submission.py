@@ -1,45 +1,68 @@
-import sys
+import argparse
+import json
 from pathlib import Path
 
-sys.path.append(str(Path(__file__).resolve().parents[1]))
+from calculate_scores import calculate_scores
 
-import pandas as pd
-from leaderboard.calculate_scores import calculate_scores_pair
 
-def score():
+def validate_metadata(submission_path: Path) -> None:
+    metadata_path = submission_path.parent / "metadata.json"
+    if not metadata_path.exists():
+        raise FileNotFoundError(f"Missing metadata.json next to {submission_path.name}")
+    try:
+        with metadata_path.open("r", encoding="utf-8") as handle:
+            json.load(handle)
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"metadata.json is invalid JSON: {exc}") from exc
 
-    submissions_dir = Path("submissions")
-    leaderboard_file = Path("leaderboard/leaderboard.csv")
 
-    ideal_path = submissions_dir / "ideal_submission.csv"
-    perturbed_path = submissions_dir / "perturbed_submission.csv"
+def main() -> None:
+    parser = argparse.ArgumentParser(description="Score a single submission file.")
+    parser.add_argument("submission_path", help="Path to predictions.csv")
+    parser.add_argument("--require-metadata", action="store_true", help="Require metadata.json next to predictions.csv")
+    args = parser.parse_args()
 
-    scores = calculate_scores_pair(ideal_path, perturbed_path)
+    submission_path = Path(args.submission_path).resolve()
+    if args.require_metadata:
+        validate_metadata(submission_path)
 
-    print("Scores:", scores)
-
-    # Create leaderboard file if it doesn't exist
-    if not leaderboard_file.exists():
-        df = pd.DataFrame(columns=[
-            "validation_f1_ideal",
-            "validation_f1_perturbed",
-            "robustness_gap"
-        ])
-    else:
-        df = pd.read_csv(leaderboard_file)
-
-    new_row = {
-        "validation_f1_ideal": scores["validation_f1_ideal"],
-        "validation_f1_perturbed": scores["validation_f1_perturbed"],
-        "robustness_gap": scores["robustness_gap"]
-    }
-
-    df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
-
-    df.to_csv(leaderboard_file, index=False)
-
-    return scores
+    scores = calculate_scores(submission_path)
+    print(json.dumps(scores))
 
 
 if __name__ == "__main__":
-    score()
+    main()
+import argparse
+import json
+from pathlib import Path
+
+from calculate_scores import calculate_scores
+
+
+def validate_metadata(submission_path: Path) -> None:
+    metadata_path = submission_path.parent / "metadata.json"
+    if not metadata_path.exists():
+        raise FileNotFoundError(f"Missing metadata.json next to {submission_path.name}")
+    try:
+        with metadata_path.open("r", encoding="utf-8") as handle:
+            json.load(handle)
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"metadata.json is invalid JSON: {exc}") from exc
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="Score a single submission file.")
+    parser.add_argument("submission_path", help="Path to predictions.csv")
+    parser.add_argument("--require-metadata", action="store_true", help="Require metadata.json next to predictions.csv")
+    args = parser.parse_args()
+
+    submission_path = Path(args.submission_path).resolve()
+    if args.require_metadata:
+        validate_metadata(submission_path)
+
+    scores = calculate_scores(submission_path)
+    print(json.dumps(scores))
+
+
+if __name__ == "__main__":
+    main()
