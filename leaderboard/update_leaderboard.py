@@ -7,6 +7,7 @@ SUBMISSIONS_DIR = Path(__file__).resolve().parent.parent / "submissions"
 
 
 def get_participant_submissions():
+
     participants = {}
 
     for f in SUBMISSIONS_DIR.iterdir():
@@ -16,13 +17,22 @@ def get_participant_submissions():
 
         name = f.stem.lower()
 
-        # expected format: teamname_ideal.csv OR teamname_perturbed.csv
-        if "_" not in name:
-            continue
+        # ---- Support ideal_submission.csv format ----
+        if name == "ideal_submission":
+            team = "participant"
+            submission_type = "ideal"
 
-        team, submission_type = name.rsplit("_", 1)
+        elif name == "perturbed_submission":
+            team = "participant"
+            submission_type = "perturbed"
 
-        if submission_type not in ["ideal", "perturbed"]:
+        # ---- Support teamname_ideal.csv format ----
+        elif "_" in name:
+            team, submission_type = name.rsplit("_", 1)
+
+            if submission_type not in ["ideal", "perturbed"]:
+                continue
+        else:
             continue
 
         participants.setdefault(team, {})[submission_type] = f
@@ -33,6 +43,7 @@ def get_participant_submissions():
 def update_leaderboard_csv():
 
     participants = get_participant_submissions()
+
     rows = []
 
     for team, files in participants.items():
@@ -40,6 +51,8 @@ def update_leaderboard_csv():
         if "ideal" not in files or "perturbed" not in files:
             print(f"Skipping {team} (missing ideal or perturbed submission)")
             continue
+
+        print(f"Scoring submissions for team: {team}")
 
         ideal_scores = calculate_scores(files["ideal"])
         perturbed_scores = calculate_scores(files["perturbed"])
