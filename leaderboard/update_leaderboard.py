@@ -3,8 +3,14 @@ from pathlib import Path
 import pandas as pd
 import subprocess
 import json
+import sys
+from pathlib import Path
 
+# Add repo root to sys.path
+sys.path.append(str(Path(__file__).parent.parent.resolve()))
 from scripts.encryption.decrypt import decrypt_file
+
+
 
 SUBMISSIONS_DIR = Path("submissions")
 LEADERBOARD_CSV = Path(__file__).resolve().parent / "leaderboard.csv"
