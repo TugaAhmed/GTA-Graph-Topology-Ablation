@@ -10,6 +10,10 @@ on:
       - main
     types: [opened, synchronize, reopened]
   workflow_dispatch:
+    inputs:
+      pr_number:
+        description: 'PR number to run the workflow on'
+        required: false
 
 permissions:
   contents: write
