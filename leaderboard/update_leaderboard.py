@@ -1,20 +1,18 @@
-# scripts/leaderboard/update_leaderboard.py
+# leaderboard/update_leaderboard.py
 from pathlib import Path
 import pandas as pd
 import subprocess
 import json
 import sys
-from pathlib import Path
 
-# Add repo root to sys.path
-sys.path.append(str(Path(__file__).parent.parent.resolve()))
-from scripts.encryption.decrypt import decrypt_file
+# Repo root
+repo_root = Path(__file__).parent.parent.resolve()
+sys.path.insert(0, str(repo_root))
 
-
+from encryption.decrypt import decrypt_file  # adjust for top-level encryption folder
 
 SUBMISSIONS_DIR = Path("submissions")
 LEADERBOARD_CSV = Path(__file__).resolve().parent / "leaderboard.csv"
-
 
 def get_leaderboard_data():
     leaderboard = []
@@ -25,24 +23,22 @@ def get_leaderboard_data():
 
         ideal_enc = team_dir / "ideal.enc"
         pert_enc = team_dir / "perturbed.enc"
-
         if not ideal_enc.exists() or not pert_enc.exists():
             print(f"Skipping {team_dir.name}: missing files")
             continue
 
-        # Decrypted paths
+        # Decrypted files
         ideal_csv = team_dir / "ideal_submissions.csv"
         pert_csv = team_dir / "perturbed_submission.csv"
 
-        # Decrypt files
         decrypt_file(ideal_enc, ideal_csv)
         decrypt_file(pert_enc, pert_csv)
 
-        # Score the ideal CSV
+        # Score ideal
         try:
             ideal_scores_json = subprocess.check_output([
-                "python",
-                "scripts/score_submission.py",
+                sys.executable,
+                str(repo_root / "leaderboard/score_submission.py"),
                 str(ideal_csv),
                 "--require-metadata"
             ])
@@ -51,11 +47,11 @@ def get_leaderboard_data():
             print(f"Error scoring {ideal_csv}: {e}")
             continue
 
-        # Score the perturbed CSV
+        # Score perturbed
         try:
             pert_scores_json = subprocess.check_output([
-                "python",
-                "scripts/score_submission.py",
+                sys.executable,
+                str(repo_root / "leaderboard/score_submission.py"),
                 str(pert_csv),
                 "--require-metadata"
             ])
@@ -64,20 +60,14 @@ def get_leaderboard_data():
             print(f"Error scoring {pert_csv}: {e}")
             continue
 
-        # Compute leaderboard scores
-        scores = {
+        leaderboard.append({
+            "team_name": team_dir.name,
             "validation_f1_ideal": ideal_scores["validation_f1_score"],
             "validation_f1_perturbed": pert_scores["validation_f1_score"],
             "robustness_gap": ideal_scores["validation_f1_score"] - pert_scores["validation_f1_score"]
-        }
-
-        leaderboard.append({
-            "team_name": team_dir.name,
-            **scores
         })
 
     return leaderboard
-
 
 def update_leaderboard_csv():
     leaderboard_data = get_leaderboard_data()
@@ -86,17 +76,10 @@ def update_leaderboard_csv():
         return
 
     df = pd.DataFrame(leaderboard_data)
-
-    # Rank: sort by perturbed F1 descending, then smaller gap wins
-    df = df.sort_values(
-        ["validation_f1_perturbed", "robustness_gap"],
-        ascending=[False, True]
-    ).reset_index(drop=True)
+    df = df.sort_values(["validation_f1_perturbed", "robustness_gap"], ascending=[False, True]).reset_index(drop=True)
     df.insert(0, "rank", range(1, len(df) + 1))
-
     df.to_csv(LEADERBOARD_CSV, index=False)
     print(f"Updated leaderboard at {LEADERBOARD_CSV}")
-
 
 if __name__ == "__main__":
     update_leaderboard_csv()
