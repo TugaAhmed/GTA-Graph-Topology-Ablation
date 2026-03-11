@@ -4,7 +4,6 @@ import pandas as pd
 import subprocess
 import json
 
-from scripts.leaderboard.calculate_scores import calculate_scores_pair
 from scripts.encryption.decrypt import decrypt_file
 
 SUBMISSIONS_DIR = Path("submissions")
@@ -25,16 +24,47 @@ def get_leaderboard_data():
             print(f"Skipping {team_dir.name}: missing files")
             continue
 
-        # Decrypted paths (updated names)
+        # Decrypted paths
         ideal_csv = team_dir / "ideal_submissions.csv"
         pert_csv = team_dir / "perturbed_submission.csv"
 
-        # Decrypt
+        # Decrypt the files
         decrypt_file(ideal_enc, ideal_csv)
         decrypt_file(pert_enc, pert_csv)
 
-        # Calculate scores
-        scores = calculate_scores_pair(ideal_csv, pert_csv)
+        # Call score_submission.py for ideal CSV
+        try:
+            ideal_scores_json = subprocess.check_output([
+                "python",
+                "scripts/score_submission.py",
+                str(ideal_csv),
+                "--require-metadata"
+            ])
+            ideal_scores = json.loads(ideal_scores_json)
+        except subprocess.CalledProcessError as e:
+            print(f"Error scoring {ideal_csv}: {e}")
+            continue
+
+        # Call score_submission.py for perturbed CSV
+        try:
+            pert_scores_json = subprocess.check_output([
+                "python",
+                "scripts/score_submission.py",
+                str(pert_csv),
+                "--require-metadata"
+            ])
+            pert_scores = json.loads(pert_scores_json)
+        except subprocess.CalledProcessError as e:
+            print(f"Error scoring {pert_csv}: {e}")
+            continue
+
+        # Compute leaderboard scores
+        scores = {
+            "validation_f1_ideal": ideal_scores["validation_f1_score"],
+            "validation_f1_perturbed": pert_scores["validation_f1_score"],
+            "robustness_gap": ideal_scores["validation_f1_score"] - pert_scores["validation_f1_score"]
+        }
+
         leaderboard.append({
             "team_name": team_dir.name,
             **scores
