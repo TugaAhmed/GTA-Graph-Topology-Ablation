@@ -55,7 +55,7 @@ jobs:
             echo "ERROR: calculate_scores.py not found!"
           fi
 
-      # 3️⃣ NEW STEP: Remove duplicate calculate_scores.py from scripts folder
+      # 3️⃣ Clean up duplicate calculate_scores.py files
       - name: Clean up duplicate calculate_scores.py
         run: |
           echo "=== CHECKING FOR DUPLICATE CALCULATE_SCORES.PY FILES ==="
@@ -73,7 +73,6 @@ jobs:
             echo "✅ No duplicate found in scripts/leaderboard/"
           fi
           
-          # Also check for any other locations
           echo ""
           echo "=== CHECKING FOR ANY OTHER CALCULATE_SCORES.PY FILES ==="
           find . -path "./.git" -prune -o -name "calculate_scores.py" -type f -print
@@ -103,7 +102,7 @@ jobs:
           python -m pip install -r requirements.txt
           python -m pip install --upgrade cryptography
 
-      # 6️⃣ Optional: Verify cryptography
+      # 6️⃣ Verify cryptography
       - name: Verify cryptography
         run: |
           python -m pip show cryptography
@@ -148,18 +147,27 @@ jobs:
           echo "=== FINAL SUBMISSIONS STRUCTURE ==="
           find submissions -type f -name "*.json" -o -name "*.csv" -o -name "*.enc" | sort
 
-      # 8️⃣ Debug: list submissions folder
+      # 8️⃣ List submissions folder
       - name: List submissions folder
         run: |
           echo "DEBUG: Listing submissions folder contents:"
           ls -R submissions || echo "No submissions found"
 
-      # 9️⃣ Run the submission processing script
+      # 9️⃣ Create test labels file and run submission processing
       - name: Decrypt, Score, and Update Leaderboard
         env:
           SUBMISSION_PRIVATE_KEY: ${{ secrets.PRIVATE_KEY }}
-          TEST_LABELS_CSV: ${{ secrets.TEST_LABELS_CSV }}
+          TEST_LABELS_CONTENT: ${{ secrets.TEST_LABELS_CSV }}
         run: |
+          echo "Creating test labels file from secret..."
+          mkdir -p data
+          echo "$TEST_LABELS_CONTENT" > data/test_labels_hidden.csv
+          echo "Test labels file created (first 5 lines):"
+          head -5 data/test_labels_hidden.csv
+          
+          # Set the environment variable to the file path
+          export TEST_LABELS_CSV=data/test_labels_hidden.csv
+          
           echo "Decrypting and scoring submissions..."
           python .github/scripts/process_submission.py
 
