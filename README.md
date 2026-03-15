@@ -193,8 +193,8 @@ project_root/
 │   ├── ideal_submission.csv
 │   ├── perturbed_submission.csv
 │   └── team_name/           # <-- folder to be created
-│       ├── ideal.enc        # Keep same name
-│       └── perturbed.enc    # Keep same name
+│       ├── ideal.enc        # For your geenrated Ideal_submission.csv.enc change name to ideal.enc (mandatory) see, submissions/Idrees_Bhat/
+│       └── perturbed.enc    # or your geenrated perturbed_submission.csv.enc change name to perturbed.enc (mandatory) see, submissions/Idrees_Bhat/
 └── encrypt_submissions.py   # script that encrypts files
 ```
 
