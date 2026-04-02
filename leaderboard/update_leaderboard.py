@@ -1,5 +1,5 @@
 # leaderboard/update_leaderboard.py
-    
+
 from pathlib import Path
 import pandas as pd
 import subprocess
@@ -89,31 +89,49 @@ def get_leaderboard_data():
         print(f"DEBUG: Absolute path: {team_dir.absolute()}")
         print("DEBUG: Files in team folder:", [f.name for f in team_dir.iterdir()])
 
+        # FIXED: Check for both encrypted AND decrypted files
         ideal_enc = team_dir / "ideal.enc"
         pert_enc = team_dir / "perturbed.enc"
+        ideal_csv = team_dir / "ideal_submissions.csv"
+        pert_csv = team_dir / "perturbed_submission.csv"
 
-        if not ideal_enc.exists() or not pert_enc.exists():
-            print(f"Skipping {team_dir.name}: missing files (expected ideal.enc and perturbed.enc)")
+        # Check if we have any form of submission files
+        has_ideal = ideal_enc.exists() or ideal_csv.exists()
+        has_pert = pert_enc.exists() or pert_csv.exists()
+        
+        if not has_ideal or not has_pert:
+            print(f"Skipping {team_dir.name}: missing files (ideal: {has_ideal}, perturbed: {has_pert})")
             continue
 
         # Create metadata FIRST, before any decryption
         print(f"DEBUG: Ensuring metadata exists for {team_dir.name}")
         ensure_metadata(team_dir)
 
-        # Decrypted CSV files
-        ideal_csv = team_dir / "ideal_submissions.csv"
-        pert_csv = team_dir / "perturbed_submission.csv"
+        # Decrypt if encrypted files exist, otherwise use existing CSVs
+        if ideal_enc.exists():
+            print(f"DEBUG: Decrypting {ideal_enc} -> {ideal_csv}")
+            decrypt_file(ideal_enc, ideal_csv)
+        else:
+            print(f"DEBUG: Using existing ideal CSV: {ideal_csv}")
+            
+        if pert_enc.exists():
+            print(f"DEBUG: Decrypting {pert_enc} -> {pert_csv}")
+            decrypt_file(pert_enc, pert_csv)
+        else:
+            print(f"DEBUG: Using existing perturbed CSV: {pert_csv}")
 
-        # Decrypt
-        print(f"DEBUG: Decrypting {ideal_enc} -> {ideal_csv}")
-        decrypt_file(ideal_enc, ideal_csv)
-        print(f"DEBUG: Decrypting {pert_enc} -> {pert_csv}")
-        decrypt_file(pert_enc, pert_csv)
-
-        # Verify files exist after decryption
+        # Verify files exist after decryption/check
         print("DEBUG: After decryption - Files in team folder:")
         for f in team_dir.iterdir():
             print(f"  {f.name} (size: {f.stat().st_size if f.exists() else 'N/A'})")
+
+        # Check if CSVs exist now
+        if not ideal_csv.exists():
+            print(f"ERROR: ideal CSV not found at {ideal_csv}")
+            continue
+        if not pert_csv.exists():
+            print(f"ERROR: perturbed CSV not found at {pert_csv}")
+            continue
 
         # PREVIEW THE DECRYPTED CSV FILES
         ideal_df = preview_csv_file(ideal_csv, "Ideal Submission")
@@ -224,6 +242,8 @@ def get_leaderboard_data():
             "validation_f1_perturbed": pert_scores.get("validation_f1_score", 0),
             "robustness_gap": ideal_scores.get("validation_f1_score", 0) - pert_scores.get("validation_f1_score", 0)
         })
+        
+        print(f"DEBUG: Successfully added {team_dir.name} to leaderboard")
 
     return leaderboard
 
@@ -245,13 +265,20 @@ def update_leaderboard_csv():
     print(f"DEBUG: DataFrame shape before sorting: {df.shape}")
     print(f"DEBUG: DataFrame contents before sorting:\n{df}")
     
+    # Sort by validation_f1_perturbed (higher is better) and robustness_gap (lower is better)
     df = df.sort_values(
-        ["validation_f1_perturbed", "robustness_gap"], ascending=[False, True]
+        ["validation_f1_perturbed", "robustness_gap"], 
+        ascending=[False, True]
     ).reset_index(drop=True)
+    
+    # Add rank starting from 1
     df.insert(0, "rank", range(1, len(df) + 1))
     
+    # FIXED: Keep ALL teams, don't truncate to top 10
+    # The original doesn't truncate, but we ensure it writes all rows
     print(f"DEBUG: DataFrame shape after sorting: {df.shape}")
-    print(f"DEBUG: Final DataFrame:\n{df}")
+    print(f"DEBUG: Number of teams to write: {len(df)}")
+    print(f"DEBUG: Final DataFrame:\n{df.to_string()}")
     
     # Ensure the docs directory exists
     LEADERBOARD_CSV.parent.mkdir(parents=True, exist_ok=True)
@@ -269,6 +296,14 @@ def update_leaderboard_csv():
             df_check = pd.read_csv(LEADERBOARD_CSV)
             print(f"DEBUG: Verified CSV contains {len(df_check)} rows")
             print(f"DEBUG: Teams in CSV: {df_check['team_name'].tolist()}")
+            
+            # Verify Farhan Butt is included
+            if 'Faran_Butt' in df_check['team_name'].tolist():
+                faran_row = df_check[df_check['team_name'] == 'Faran_Butt']
+                print(f"DEBUG: ✓ Farhan Butt found in leaderboard with score: {faran_row['validation_f1_ideal'].values[0]}")
+            else:
+                print(f"DEBUG: ✗ Farhan Butt NOT found in leaderboard!")
+                print(f"DEBUG: All teams in CSV: {df_check['team_name'].tolist()}")
         else:
             print(f"ERROR: File was not created at {LEADERBOARD_CSV}")
             
@@ -279,7 +314,7 @@ def update_leaderboard_csv():
         raise
     
     print(f"Updated leaderboard at {LEADERBOARD_CSV}")
-    print("DEBUG: Leaderboard data:")
+    print("DEBUG: Final leaderboard data:")
     print(df.to_dict(orient="records"))
 
 if __name__ == "__main__":
