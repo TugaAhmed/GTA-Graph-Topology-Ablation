@@ -3,7 +3,7 @@ from pathlib import Path
 import pandas as pd
 from sklearn.metrics import f1_score
 import os
-import sys  # add this import
+import sys
 
 # Get test labels from environment variable (set in workflow)
 TEST_LABELS_PATH = os.environ.get('TEST_LABELS_CSV')
@@ -81,18 +81,26 @@ def calculate_scores(submission_path: Path):
         else:
             raise ValueError(f"Could not find ground truth column. Found: {list(gt_df.columns)}")
     
-    # Merge on graph_index
+    # Merge on graph_index with suffixes to distinguish columns
     print(f"DEBUG: Merging on graph_index...", file=sys.stderr)
-    merged = submission_df.merge(gt_df, on="graph_index", how="inner")
+    merged = submission_df.merge(gt_df, on="graph_index", how="inner", suffixes=('_pred', '_true'))
     print(f"DEBUG: Merged shape: {merged.shape}", file=sys.stderr)
+    print(f"DEBUG: Merged columns: {list(merged.columns)}", file=sys.stderr)
     
     if len(merged) == 0:
         print(f"DEBUG: Submission graph_index sample: {submission_df['graph_index'].head()}", file=sys.stderr)
         print(f"DEBUG: Test labels graph_index sample: {gt_df['graph_index'].head()}", file=sys.stderr)
         raise ValueError("No matching graph_index values found between submission and test labels")
     
-    y_pred = merged[pred_col]
-    y_true = merged[truth_col]
+    # Use the suffixed column names
+    y_pred_col = f"{pred_col}_pred"
+    y_true_col = f"{truth_col}_true"
+    
+    print(f"DEBUG: Using prediction column: {y_pred_col}", file=sys.stderr)
+    print(f"DEBUG: Using ground truth column: {y_true_col}", file=sys.stderr)
+    
+    y_pred = merged[y_pred_col]
+    y_true = merged[y_true_col]
     
     print(f"DEBUG: y_pred sample: {y_pred.head().tolist()}", file=sys.stderr)
     print(f"DEBUG: y_true sample: {y_true.head().tolist()}", file=sys.stderr)
